@@ -1,0 +1,9 @@
+{
+  "name": "@reading-game/eslint-config",
+  "version": "0.1.0",
+  "main": "index.js",
+  "dependencies": {
+    "eslint-config-next": "14.2.5",
+    "eslint-config-prettier": "^9.1.0"
+  }
+}

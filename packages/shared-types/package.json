@@ -1,0 +1,12 @@
+{
+  "name": "@reading-game/shared-types",
+  "version": "0.1.0",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
