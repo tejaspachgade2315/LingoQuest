@@ -1,0 +1,23 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Enable pnpm via corepack
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+# Copy monorepo configuration
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml turbo.json ./
+COPY packages ./packages
+COPY apps/web ./apps/web
+
+# Install dependencies
+RUN pnpm install
+
+WORKDIR /app/apps/web
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV NODE_ENV=development
+
+CMD ["pnpm", "dev"]
