@@ -1,0 +1,105 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: reading-game-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - reading_game_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7.0
+    container_name: reading-game-mongo
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - reading_game_net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.api
+    container_name: reading-game-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${GCP_KEY_PATH:-./secrets/gcp-key.json}:/app/secrets/gcp-key.json:ro
+    env_file:
+      - .env
+    environment:
+      # Docker internal networking & mount overrides
+      - REDIS_URL=redis://redis:6379/0
+      - MONGO_URI=mongodb://mongodb:27017/reading_game_db
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-key.json
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - reading_game_net
+
+  voice-worker:
+    build:
+      context: ./apps/voice-worker
+      dockerfile: Dockerfile.worker
+    container_name: reading-game-voice-worker
+    restart: unless-stopped
+    volumes:
+      - ${GCP_KEY_PATH:-./secrets/gcp-key.json}:/app/secrets/gcp-key.json:ro
+    env_file:
+      - .env
+    environment:
+      # Docker internal networking & mount overrides
+      - REDIS_URL=redis://redis:6379/0
+      - MONGO_URI=mongodb://mongodb:27017/reading_game_db
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-key.json
+      - LIVEKIT_URL=${NEXT_PUBLIC_LIVEKIT_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - reading_game_net
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.web
+    container_name: reading-game-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    networks:
+      - reading_game_net
+
+networks:
+  reading_game_net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  mongo_data:
