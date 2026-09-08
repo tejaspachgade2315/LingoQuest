@@ -82,11 +82,15 @@ class FuzzyReadingMatcher:
             prev = code
         return "".join(res[:4]).ljust(4, '0')
 
-    def check_hesitation(self, timeout_seconds: float = 4.0) -> Optional[Dict[str, Any]]:
+    def reset_hesitation_timer(self) -> None:
+        """Resets the hesitation clock after the tutor delivers a hint or prompt."""
+        self.last_advance_time = time.time()
+
+    def check_hesitation(self, timeout_seconds: float = 7.0) -> Optional[Dict[str, Any]]:
         """
         Gentle hesitation detection that assists without taking control away from the child:
-        - Tier 1 (4.0s pause): Sound out the word phonetically to coach them.
-        - Tier 2 (12.0s pause): Friendly encouragement nudge ("Take your time! Say: ...").
+        - Tier 1 (7.0s pause): Sound out the word phonetically to coach them.
+        - Tier 2 (18.0s pause): Friendly encouragement nudge ("Take your time! Say: ...").
         NEVER skips or advances the word automatically on a timer. The student remains in control.
         """
         if self.current_index >= len(self.target_words):
@@ -95,7 +99,7 @@ class FuzzyReadingMatcher:
         elapsed = time.time() - self.last_advance_time
         current_word = self.target_words[self.current_index]
 
-        if elapsed >= 12.0 and self.hesitation_tier < 2:
+        if elapsed >= 18.0 and self.hesitation_tier < 2:
             self.hesitation_tier = 2
             return {
                 "type": "reprompt",
@@ -111,7 +115,7 @@ class FuzzyReadingMatcher:
                 "wordIndex": self.current_index,
                 "word": current_word,
                 "soundedOut": sounded_out,
-                "hintText": f"Let's sound it out: {sounded_out}",
+                "hintText": f"Sound it out: {sounded_out}",
             }
         return None
 

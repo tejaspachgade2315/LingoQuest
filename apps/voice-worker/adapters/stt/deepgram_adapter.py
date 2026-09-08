@@ -29,17 +29,40 @@ class DeepgramSTTAdapter(BaseSTTAdapter):
             logger.info(f"Initializing LiveKit Deepgram STT plugin with model {self.model}")
             
             story_keywords = [
-                ("ridge", 5.0),
-                ("falcon", 5.0),
-                ("Pip", 5.0),
-                ("rocky", 3.0),
-                ("spread", 3.0),
-                ("wings", 3.0),
-                ("twilight", 4.0),
-                ("canopy", 5.0),
-                ("emerald", 4.0),
-                ("obsidian", 5.0),
-                ("turbulent", 4.0),
+                # Story 1 terms & easily confused words
+                ("above", 6.0),
+                ("ridge", 7.0),
+                ("falcon", 6.0),
+                ("Pip", 6.0),
+                ("rocky", 5.0),
+                ("spread", 5.0),
+                ("wings", 5.0),
+                ("high", 4.0),
+                ("young", 4.0),
+                ("crisp", 5.0),
+                ("morning", 4.0),
+                ("breeze", 5.0),
+                ("lifted", 4.0),
+                ("gently", 4.0),
+                ("horizon", 5.0),
+                ("courage", 5.0),
+                # Story 2 terms
+                ("twilight", 6.0),
+                ("canopy", 6.0),
+                ("violet", 5.0),
+                ("emerald", 6.0),
+                ("ancient", 5.0),
+                ("whispered", 5.0),
+                ("curious", 5.0),
+                ("creatures", 5.0),
+                # Story 3 terms
+                ("turbulent", 6.0),
+                ("currents", 5.0),
+                ("crashed", 5.0),
+                ("jagged", 5.0),
+                ("obsidian", 7.0),
+                ("cliffs", 5.0),
+                ("spire", 6.0),
             ]
 
             return deepgram.STT(

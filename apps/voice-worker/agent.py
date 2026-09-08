@@ -212,7 +212,7 @@ async def reading_agent_entrypoint(ctx: JobContext):
         while ctx.room.isconnected():
             await asyncio.sleep(0.5)
             if current_state == STATE_READING and not is_tutor_speaking:
-                hint = matcher.check_hesitation(timeout_seconds=4.0)
+                hint = matcher.check_hesitation(timeout_seconds=7.0)
                 if hint:
                     hint_type = hint.get("type", "soundout")
                     word = hint["word"]
@@ -222,7 +222,7 @@ async def reading_agent_entrypoint(ctx: JobContext):
                         struggled_words_history.append(word)
                         logger.info(
                             f"[HESITATION-HINT] Word='{word}' (Idx={word_idx}) "
-                            f"| Paused >4.0s | Soundout='{hint['soundedOut']}'"
+                            f"| Paused >7.0s | Soundout='{hint['soundedOut']}'"
                         )
                         await broadcast_data_packet({
                             "type": "hint_soundout",
@@ -230,11 +230,10 @@ async def reading_agent_entrypoint(ctx: JobContext):
                             "currentWordIndex": word_idx,
                             "word": word,
                             "soundedOut": hint["soundedOut"],
-                            "feedbackText": f"Let's sound it out: {word} ({hint['soundedOut']})",
+                            "feedbackText": f"Sound it out: {hint['soundedOut']}",
                         })
-                        await safe_say(
-                            f"Let's sound this one out together: {hint['soundedOut']}. You try: {word}!"
-                        )
+                        await safe_say(f"Sound it out: {hint['soundedOut']}")
+                        matcher.reset_hesitation_timer()
 
                     elif hint_type == "reprompt":
                         logger.info(f"[HESITATION-NUDGE] Re-prompting for Word='{word}' (Idx={word_idx})")
@@ -246,23 +245,47 @@ async def reading_agent_entrypoint(ctx: JobContext):
                             "soundedOut": word,
                             "feedbackText": f"Take your time! Say: {word}!",
                         })
-                        await safe_say(f"Take your time, superstar! Say: {word}, or click Skip to move on!")
+                        await safe_say(f"Take your time! Say: {word}, or click Skip!")
+                        matcher.reset_hesitation_timer()
 
     @session.on("user_input_transcribed")
     def on_user_speech(ev):
         """
         Triggered when streaming STT yields recognized text segment from the child's microphone.
         """
-        nonlocal current_state, sentences_since_last_check, pending_next_story_text
-        if is_tutor_speaking:
-            logger.debug("Ignoring speech while tutor is speaking (echo suppression)")
-            return
+        nonlocal current_state, sentences_since_last_check, pending_next_story_text, is_tutor_speaking
 
         msg = getattr(ev, "transcript", "")
         if not msg or not msg.strip():
             return
 
         child_speech = msg.strip()
+
+        # If tutor is speaking during reading flow, check if the child is speaking the target word
+        if is_tutor_speaking and current_state == STATE_READING:
+            if matcher.current_index < len(matcher.target_words):
+                target = matcher.target_words[matcher.current_index]
+                spoken_tokens = [matcher._normalize(w) for w in child_speech.split() if matcher._normalize(w)]
+                norm_target = matcher._normalize(target)
+
+                # Check if child spoke the target word (or reasonable match) while tutor was speaking
+                matched = any(
+                    matcher._score_word(tok, norm_target)[1] in ("correct", "imperfect")
+                    for tok in spoken_tokens
+                )
+                if matched:
+                    logger.info(f"[CHILD-INTERRUPT] Child spoke target '{target}' while tutor was speaking. Halting tutor.")
+                    try:
+                        session.interrupt(force=True)
+                    except Exception:
+                        pass
+                    is_tutor_speaking = False
+                else:
+                    # Pure echo of tutor's prompt from speakers -> ignore to prevent self-trigger
+                    logger.debug(f"Ignoring non-matching audio '{child_speech}' while tutor is speaking")
+                    return
+            else:
+                return
 
         # MODE 1: COMPREHENSION CHECKPOINT (Child answers plot question conversationally)
         if current_state == STATE_COMPREHENSION_CHECK and active_comprehension_q:
@@ -286,34 +309,44 @@ async def reading_agent_entrypoint(ctx: JobContext):
             )
 
             if results:
-                latest_eval = results[-1]
+                # Halt any residual tutor speech immediately
+                if is_tutor_speaking:
+                    try:
+                        session.interrupt(force=True)
+                    except Exception:
+                        pass
+                    is_tutor_speaking = False
+
                 metrics = matcher.get_session_metrics(elapsed)
 
-                if latest_eval.get("status") in ("imperfect", "missed"):
-                    struggled_words_history.append(latest_eval.get("word", ""))
+                # Broadcast highlight packet for each recognized word
+                for eval_item in results:
+                    if eval_item.get("status") in ("imperfect", "missed"):
+                        struggled_words_history.append(eval_item.get("word", ""))
 
-                logger.info(
-                    f"[WORD-EVAL] Target='{latest_eval.get('word')}' "
-                    f"| Heard='{latest_eval.get('spokenAlternative')}' "
-                    f"| Status={latest_eval.get('status')} "
-                    f"| Score={latest_eval.get('similarityScore', 1.0):.2f} "
-                    f"| Accuracy={metrics.get('accuracyPercentage')}% "
-                    f"| Streak={metrics.get('streak', 0)}x"
-                )
+                    logger.info(
+                        f"[WORD-EVAL] Target='{eval_item.get('word')}' "
+                        f"| Heard='{eval_item.get('spokenAlternative')}' "
+                        f"| Status={eval_item.get('status')} "
+                        f"| Score={eval_item.get('similarityScore', 1.0):.2f} "
+                        f"| Accuracy={metrics.get('accuracyPercentage')}% "
+                        f"| Streak={metrics.get('streak', 0)}x"
+                    )
 
-                asyncio.create_task(
-                    broadcast_data_packet({
-                        "type": "word_highlight",
-                        "sessionId": ctx.room.name,
-                        "currentWordIndex": matcher.current_index,
-                        "evaluatedWord": latest_eval,
-                        "metrics": metrics,
-                        "heardSpeech": child_speech,
-                        "feedbackText": f"Great reading! Streak: {metrics.get('streak', 0)}x | Score: {metrics.get('points', 0)} Stars!",
-                    })
-                )
+                    asyncio.create_task(
+                        broadcast_data_packet({
+                            "type": "word_highlight",
+                            "sessionId": ctx.room.name,
+                            "currentWordIndex": matcher.current_index,
+                            "evaluatedWord": eval_item,
+                            "metrics": metrics,
+                            "heardSpeech": child_speech,
+                            "feedbackText": f"Great reading! Streak: {metrics.get('streak', 0)}x | Score: {metrics.get('points', 0)} Stars!",
+                        })
+                    )
 
                 # Persist live progress into Redis & MongoDB
+                latest_eval = results[-1]
                 asyncio.create_task(
                     persist_game_state(metrics, latest_word=latest_eval, event_name="word_evaluated")
                 )
