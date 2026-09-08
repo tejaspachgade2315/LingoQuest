@@ -6,10 +6,31 @@ import logging
 import redis.asyncio as aioredis
 from typing import Optional
 
+# Pre-register LiveKit plugins on the main thread during module load
+try:
+    from livekit.plugins import deepgram
+except ImportError:
+    deepgram = None
+
+try:
+    from livekit.plugins import cartesia
+except ImportError:
+    cartesia = None
+
+try:
+    from livekit.plugins import openai
+except ImportError:
+    openai = None
+
+try:
+    from livekit.plugins import google
+except ImportError:
+    google = None
+
 from core.config import settings
 from adapters.telephony.factory import TelephonyFactory
 from agent import reading_agent_entrypoint
-from livekit.agents import WorkerOptions, cli
+from livekit.agents import WorkerOptions, JobProcess, cli
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,6 +38,18 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("voice-worker.main")
+
+
+def prewarm(proc: JobProcess):
+    """Pre-register plugins on the main thread of newly initialized worker processes."""
+    try:
+        from livekit.plugins import deepgram
+    except ImportError:
+        pass
+    try:
+        from livekit.plugins import cartesia
+    except ImportError:
+        pass
 
 
 async def run_redis_consumer():
@@ -89,6 +122,7 @@ def main():
     # Start background Redis consumer in async loop if starting agent
     worker_options = WorkerOptions(
         entrypoint_fnc=reading_agent_entrypoint,
+        prewarm_fnc=prewarm,
         ws_url=settings.effective_livekit_url,
         api_key=settings.LIVEKIT_API_KEY,
         api_secret=settings.LIVEKIT_API_SECRET,

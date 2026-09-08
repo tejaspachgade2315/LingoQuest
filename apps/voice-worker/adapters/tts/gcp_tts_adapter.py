@@ -3,6 +3,11 @@ from typing import Any, Optional
 from core.interfaces import BaseTTSAdapter
 from core.config import settings
 
+try:
+    from livekit.plugins import google
+except ImportError:
+    google = None
+
 logger = logging.getLogger("voice-worker.tts.gcp")
 
 
@@ -27,8 +32,10 @@ class GCPTTSAdapter(BaseTTSAdapter):
             logger.warning(f"Could not initialize Google Cloud TTS client: {e}")
 
     def get_livekit_tts(self) -> Any:
+        if google is None:
+            logger.warning("livekit-plugins-google is not installed")
+            return None
         try:
-            from livekit.plugins import google
             logger.info("Initializing LiveKit Google Cloud TTS plugin...")
             return google.TTS(
                 voice_name=self.voice_name,

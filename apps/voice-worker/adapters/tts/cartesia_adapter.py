@@ -3,6 +3,11 @@ from typing import Any, Optional
 from core.interfaces import BaseTTSAdapter
 from core.config import settings
 
+try:
+    from livekit.plugins import cartesia
+except ImportError:
+    cartesia = None
+
 logger = logging.getLogger("voice-worker.tts.cartesia")
 
 
@@ -23,8 +28,9 @@ class CartesiaTTSAdapter(BaseTTSAdapter):
         self.voice_id = voice_id
 
     def get_livekit_tts(self) -> Any:
+        if cartesia is None:
+            raise RuntimeError("livekit-plugins-cartesia is not installed or failed to load")
         try:
-            from livekit.plugins import cartesia
             logger.info("Initializing LiveKit Cartesia TTS plugin...")
             return cartesia.TTS(
                 api_key=self.api_key,

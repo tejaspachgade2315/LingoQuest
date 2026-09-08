@@ -16,6 +16,17 @@ from livekit.agents import (
     voice,
 )
 
+# Pre-register LiveKit plugins on the main thread during module load
+try:
+    from livekit.plugins import deepgram
+except ImportError:
+    pass
+
+try:
+    from livekit.plugins import cartesia
+except ImportError:
+    pass
+
 from core.config import settings
 from fuzzy_matcher import FuzzyReadingMatcher
 from adapters.llm.factory import LLMFactory

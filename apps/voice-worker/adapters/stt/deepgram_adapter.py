@@ -3,6 +3,11 @@ from typing import Any, Optional
 from core.interfaces import BaseSTTAdapter
 from core.config import settings
 
+try:
+    from livekit.plugins import deepgram
+except ImportError:
+    deepgram = None
+
 logger = logging.getLogger("voice-worker.stt.deepgram")
 
 
@@ -18,8 +23,9 @@ class DeepgramSTTAdapter(BaseSTTAdapter):
 
     def get_livekit_stt(self) -> Any:
         """Returns a LiveKit Agents deepgram STT plugin instance."""
+        if deepgram is None:
+            raise RuntimeError("livekit-plugins-deepgram is not installed or failed to load")
         try:
-            from livekit.plugins import deepgram
             logger.info(f"Initializing LiveKit Deepgram STT plugin with model {self.model}")
             
             story_keywords = [

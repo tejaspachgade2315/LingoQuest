@@ -2,6 +2,11 @@ import logging
 from typing import Any, Optional
 from core.interfaces import BaseSTTAdapter
 
+try:
+    from livekit.plugins import openai
+except ImportError:
+    openai = None
+
 logger = logging.getLogger("voice-worker.stt.whisper")
 
 
@@ -15,8 +20,10 @@ class WhisperSTTAdapter(BaseSTTAdapter):
         self.model_size = model_size
 
     def get_livekit_stt(self) -> Any:
+        if openai is None:
+            logger.warning("livekit-plugins-openai is not installed")
+            return None
         try:
-            from livekit.plugins import openai
             logger.info("Initializing LiveKit OpenAI Whisper STT plugin...")
             return openai.STT(model="whisper-1")
         except Exception as e:
